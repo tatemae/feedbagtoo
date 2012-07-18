@@ -9,7 +9,7 @@ Gem::Specification.new do |s|
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Axiombox", "David Moreno", "Joel Duffin", "Justin Ball", "Fabien Penso"]
-  s.date = %q{2012-07-17}
+  s.date = %q{2012-07-18}
   s.default_executable = %q{feedbag}
   s.description = %q{This gem will return title and url for each feed discovered at a given url}
   s.email = %q{justin@tatemae.com}
@@ -22,14 +22,19 @@ Gem::Specification.new do |s|
   s.files = [
     "COPYING",
     "ChangeLog",
+    "Gemfile",
+    "Gemfile.lock",
     "README.markdown",
     "Rakefile",
     "TODO",
     "VERSION",
     "benchmark/rfeedfinder_benchmark.rb",
     "bin/feedbag",
+    "feedbagtoo.gemspec",
     "index.html",
     "lib/feedbag.rb",
+    "lib/feedbagtoo.rb",
+    "rails/init.rb",
     "test/atom_autodiscovery_test.rb",
     "test/feedbag_test.rb",
     "test/test_helper.rb"
