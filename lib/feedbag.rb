@@ -25,8 +25,11 @@ require "rubygems"
 require "hpricot"
 require "open-uri"
 require "net/http"
+require 'timeout'
+require 'iconv' if RUBY_VERSION < '1.9'
 
 module Feedbag
+  Feed = Struct.new(:url, :title, :human_url, :description)
 
 	@content_types = [
 		'application/x.atom+xml',
@@ -71,6 +74,8 @@ module Feedbag
 		end
 		#url = "#{url_uri.scheme or 'http'}://#{url_uri.host}#{url_uri.path}"
 
+    #return self.add_feed(url, nil) if looks_like_feed? url
+
 		# check if feed_valid is avail
     begin
   		require "feed_validator"
@@ -88,56 +93,71 @@ module Feedbag
 	  end
 
 		begin
-			html = open(url) do |f|
-				content_type = f.content_type.downcase
-				if content_type == "application/octet-stream" # open failed
-				  content_type = f.meta["content-type"].gsub(/;.*$/, '')
-				end
-				if @content_types.include?(content_type)
-					return self.add_feed(url, nil)
-				end
-
-				doc = Hpricot(f.read)
-
-				if doc.at("base") and doc.at("base")["href"]
-					$base_uri = doc.at("base")["href"]
-				else
-					$base_uri = nil
-				end
-
-				# first with links
-        (doc/"atom:link").each do |l|
-					next unless l["rel"]
-					if l["type"] and @content_types.include?(l["type"].downcase.strip) and l["rel"].downcase == "self"
-						self.add_feed(l["href"], url, $base_uri)
+			Timeout::timeout(15) do
+				html = open(url) do |f|
+					content_type = f.content_type.downcase
+					if content_type == "application/octet-stream" # open failed
+					  content_type = f.meta["content-type"].gsub(/;.*$/, '')
 					end
-				end
-
-				(doc/"link").each do |l|
-					next unless l["rel"]
-					if l["type"] and @content_types.include?(l["type"].downcase.strip) and (l["rel"].downcase =~ /alternate/i or l["rel"] == "service.feed")
-						self.add_feed(l["href"], url, $base_uri)
+					if @content_types.include?(content_type)
+						return self.add_feed(url, nil)
 					end
-				end
 
-				(doc/"a").each do |a|
-  				next unless a["href"]
-	  			if self.looks_like_feed?(a["href"]) and (a["href"] =~ /\// or a["href"] =~ /#{url_uri.host}/)
-		  			self.add_feed(a["href"], url, $base_uri)
-			  	end
-				end
+					if RUBY_VERSION < '1.9'
+						ic = Iconv.new('UTF-8//IGNORE', f.charset)
+          	doc = Hpricot(ic.iconv(f.read))
+          else
+          	doc = Hpricot(f.read)
+          end
 
-  			(doc/"a").each do |a|
-	  			next unless a["href"]
-		  		if self.looks_like_feed?(a["href"])
-			  		self.add_feed(a["href"], url, $base_uri)
-				  end
-				end
+					if doc.at("base") and doc.at("base")["href"]
+						$base_uri = doc.at("base")["href"]
+					else
+						$base_uri = nil
+					end
 
-        # Added support for feeds like http://tabtimes.com/tbfeed/mashable/full.xml
-        if url.match(/.xml$/) and doc.root and doc.root["xml:base"] and doc.root["xml:base"].strip == url.strip
-					self.add_feed(url, nil)
-        end
+					title = (doc/:title).first
+					title = title.innerHTML if title
+
+					description = (doc/:description).first
+					description = description.innerHTML if description
+
+					# first with links
+	        (doc/"atom:link").each do |l|
+						next unless l["rel"]
+						if l["type"] and @content_types.include?(l["type"].downcase.strip) and l["rel"].downcase == "self"
+							self.add_feed(l["href"], url, $base_uri, title, description || title)
+						end
+					end
+
+					(doc/"link").each do |l|
+						next unless l["rel"]
+						if l["type"] and @content_types.include?(l["type"].downcase.strip) and (l["rel"].downcase =~ /alternate/i or l["rel"] == "service.feed")
+							self.add_feed(l["href"], url, $base_uri, title, description || title)
+						end
+					end
+
+					(doc/"a").each do |a|
+	  				next unless a["href"]
+		  			if self.looks_like_feed?(a["href"]) and (a["href"] =~ /\// or a["href"] =~ /#{url_uri.host}/)
+		  				title = a["title"] || a.inner_html || a['alt'] || title
+			  			self.add_feed(a["href"], url, $base_uri, title, description || title)
+				  	end
+					end
+
+	  			(doc/"a").each do |a|
+		  			next unless a["href"]
+			  		if self.looks_like_feed?(a["href"])
+			  			title = a["title"] || a.inner_html || a['alt'] || title
+				  		self.add_feed(a["href"], url, $base_uri, title, description || title)
+					  end
+					end
+
+	        # Added support for feeds like http://tabtimes.com/tbfeed/mashable/full.xml
+	        if url.match(/.xml$/) and doc.root and doc.root["xml:base"] and doc.root["xml:base"].strip == url.strip
+						self.add_feed(url, url, $base_uri, title, description)
+	        end
+				end
 			end
 		rescue Timeout::Error => err
 			$stderr.puts "Timeout error ocurred with `#{url}: #{err}'"
@@ -150,18 +170,17 @@ module Feedbag
 		ensure
 			return $feeds
 		end
-		
 	end
 
 	def self.looks_like_feed?(url)
-		if url =~ /(\.(rdf|xml|rdf|rss)$|feed=(rss|atom)|(atom|feed)\/?$)/i
+		if url =~ /((\.|\/)(rdf|xml|rdf|rss)$|feed=(rss|atom)|(atom|feed)\/?$)/i
 			true
 		else
 			false
 		end
 	end
 
-	def self.add_feed(feed_url, orig_url, base_uri = nil)
+	def self.add_feed(feed_url, orig_url, base_uri = nil, title = "", description = "")
 		# puts "#{feed_url} - #{orig_url}"
 		url = feed_url.sub(/^feed:/, '').strip
 
@@ -182,7 +201,7 @@ module Feedbag
 		end
 
 		# verify url is really valid
-		$feeds.push(url) unless $feeds.include?(url)# if self._is_http_valid(URI.parse(url), orig_url)
+		$feeds.push(Feed.new(url, title, orig_url, description)) unless $feeds.any? { |f| f.url == url }# if self._is_http_valid(URI.parse(url), orig_url)
 	end
 
 	# not used. yet.
