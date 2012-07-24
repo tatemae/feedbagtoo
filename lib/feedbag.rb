@@ -93,7 +93,7 @@ module Feedbag
 	  end
 
 		begin
-			Timeout::timeout(15) do
+			Timeout::timeout(20) do
 				html = open(url) do |f|
 					content_type = f.content_type.downcase
 					if content_type == "application/octet-stream" # open failed
@@ -140,16 +140,16 @@ module Feedbag
 					(doc/"a").each do |a|
 	  				next unless a["href"]
 		  			if self.looks_like_feed?(a["href"]) and (a["href"] =~ /\// or a["href"] =~ /#{url_uri.host}/)
-		  				title = a["title"] || a.innerText || a['alt'] || title
-			  			self.add_feed(a["href"], url, $base_uri, title, description || title)
+		  				calculated_title = self.title_for_anchor(a, title)
+			  			self.add_feed(a["href"], url, $base_uri, calculated_title, description || calculated_title)
 				  	end
 					end
 
 	  			(doc/"a").each do |a|
 		  			next unless a["href"]
 			  		if self.looks_like_feed?(a["href"])
-			  			title = a["title"] || a.innerText || a['alt'] || title
-				  		self.add_feed(a["href"], url, $base_uri, title, description || title)
+			  			calculated_title = self.title_for_anchor(a, title)
+				  		self.add_feed(a["href"], url, $base_uri, calculated_title, description || calculated_title)
 					  end
 					end
 
@@ -173,10 +173,20 @@ module Feedbag
 	end
 
 	def self.looks_like_feed?(url)
+		return false unless url[0...4] == 'http'
 		if url =~ /((\.|\/)(rdf|xml|rdf|rss)$|feed=(rss|atom)|(atom|feed)\/?$)/i
 			true
 		else
 			false
+		end
+	end
+
+	def self.title_for_anchor(a, title)
+		t = a["title"] || a.innerText || a['alt']
+		if(t && t.length > 0)
+			t
+		else
+			title
 		end
 	end
 
