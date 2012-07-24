@@ -140,7 +140,7 @@ module Feedbag
 					(doc/"a").each do |a|
 	  				next unless a["href"]
 		  			if self.looks_like_feed?(a["href"]) and (a["href"] =~ /\// or a["href"] =~ /#{url_uri.host}/)
-		  				title = a["title"] || a.inner_html || a['alt'] || title
+		  				title = a["title"] || a.innerText || a['alt'] || title
 			  			self.add_feed(a["href"], url, $base_uri, title, description || title)
 				  	end
 					end
@@ -148,7 +148,7 @@ module Feedbag
 	  			(doc/"a").each do |a|
 		  			next unless a["href"]
 			  		if self.looks_like_feed?(a["href"])
-			  			title = a["title"] || a.inner_html || a['alt'] || title
+			  			title = a["title"] || a.innerText || a['alt'] || title
 				  		self.add_feed(a["href"], url, $base_uri, title, description || title)
 					  end
 					end

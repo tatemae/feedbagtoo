@@ -44,4 +44,8 @@ class FeedbagTest < ActiveSupport::TestCase
     end
   end
 
+  test "Feedgab should find multiple feeds" do
+    feeds = Feedbag.find('http://www.engadget.com')
+    assert feeds.length > 0
+  end
 end
